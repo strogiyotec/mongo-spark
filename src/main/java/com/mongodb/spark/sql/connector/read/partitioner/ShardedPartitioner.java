@@ -99,6 +99,9 @@ public final class ShardedPartitioner implements Partitioner {
   public List<MongoInputPartition> generatePartitions(final ReadConfig readConfig) {
     LOGGER.info("Getting shard chunk bounds for '{}'", readConfig.getNamespace().getFullName());
 
+    MongoConfig partitionerOptions = readConfig.getPartitionerOptions();
+    boolean shuffle = partitionerOptions.getBoolean(SHUFFLE_CONFIG, SHUFFLE_DEFAULT);
+    Random shuffleRandom = shuffle ? createShuffleRandom(partitionerOptions) : null;
     BsonDocument configCollectionMetadata = readConfig.withClient(client -> client
         .getDatabase(CONFIG_DATABASE)
         .getCollection(CONFIG_COLLECTIONS, BsonDocument.class)
@@ -154,8 +157,7 @@ public final class ShardedPartitioner implements Partitioner {
       return new SinglePartitionPartitioner().generatePartitions(readConfig);
     }
 
-    MongoConfig partitionerOptions = readConfig.getPartitionerOptions();
-    if (partitionerOptions.getBoolean(SHUFFLE_CONFIG, SHUFFLE_DEFAULT)) {
+    if (shuffle) {
       Collections.shuffle(partitions, createShuffleRandom(partitionerOptions));
     }
     return partitions;
