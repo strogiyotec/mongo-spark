@@ -158,7 +158,7 @@ public final class ShardedPartitioner implements Partitioner {
     }
 
     if (shuffle) {
-      Collections.shuffle(partitions, createShuffleRandom(partitionerOptions));
+      Collections.shuffle(partitions, shuffleRandom);
     }
     return partitions;
   }
