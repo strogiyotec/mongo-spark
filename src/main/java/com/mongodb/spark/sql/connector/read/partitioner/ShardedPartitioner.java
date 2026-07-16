@@ -99,9 +99,6 @@ public final class ShardedPartitioner implements Partitioner {
   public List<MongoInputPartition> generatePartitions(final ReadConfig readConfig) {
     LOGGER.info("Getting shard chunk bounds for '{}'", readConfig.getNamespace().getFullName());
 
-    MongoConfig partitionerOptions = readConfig.getPartitionerOptions();
-    boolean shuffle = partitionerOptions.getBoolean(SHUFFLE_CONFIG, SHUFFLE_DEFAULT);
-    Random shuffleRandom = shuffle ? createShuffleRandom(partitionerOptions) : null;
     BsonDocument configCollectionMetadata = readConfig.withClient(client -> client
         .getDatabase(CONFIG_DATABASE)
         .getCollection(CONFIG_COLLECTIONS, BsonDocument.class)
@@ -157,9 +154,6 @@ public final class ShardedPartitioner implements Partitioner {
       return new SinglePartitionPartitioner().generatePartitions(readConfig);
     }
 
-    if (shuffle) {
-      Collections.shuffle(partitions, shuffleRandom);
-    }
     return partitions;
   }
 
@@ -177,12 +171,12 @@ public final class ShardedPartitioner implements Partitioner {
     }
   }
 
-  /**
-   * The returned list is guaranteed to be mutable.
-   */
   @NotNull
   private List<MongoInputPartition> createMongoInputPartitions(
       final List<BsonDocument> chunks, final ReadConfig readConfig) {
+    MongoConfig partitionerOptions = readConfig.getPartitionerOptions();
+    boolean shuffle = partitionerOptions.getBoolean(SHUFFLE_CONFIG, SHUFFLE_DEFAULT);
+    Random shuffleRandom = shuffle ? createShuffleRandom(partitionerOptions) : null;
     Map<String, List<String>> shardMap = createShardMap(readConfig);
 
     return IntStream.range(0, chunks.size())
@@ -215,8 +209,12 @@ public final class ShardedPartitioner implements Partitioner {
               shardMap.get(chunkDocument.getString("shard", new BsonString("")).getValue()));
         })
         .filter(Objects::nonNull)
-        // Collect into an ArrayList so the partitions can be shuffled in place if requested.
-        .collect(Collectors.toCollection(ArrayList::new));
+        .collect(Collectors.collectingAndThen(Collectors.toCollection(ArrayList::new), collected -> {
+          if (shuffle) {
+            Collections.shuffle(collected, shuffleRandom);
+          }
+          return collected;
+        }));
   }
 
   @NotNull
